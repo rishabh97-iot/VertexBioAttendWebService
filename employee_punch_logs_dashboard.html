@@ -1,0 +1,965 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full bg-slate-900 text-slate-100">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Punch Logs Dashboard</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js for Visualizations -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Inter Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        brand: {
+                            50: '#eef2ff',
+                            500: '#6366f1',
+                            600: '#4f46e5',
+                            700: '#4338ca',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar for dark table theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+    </style>
+</head>
+<body class="h-full font-sans antialiased bg-slate-900 text-slate-100 flex flex-col">
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-5 right-5 z-50 flex flex-col gap-2 max-w-md w-full pointer-events-none"></div>
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800/80 backdrop-blur border-b border-slate-700/60 sticky top-0 z-30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 to-purple-500 flex items-center justify-center text-white font-bold shadow-lg shadow-indigo-500/20">
+                    <i class="fa-solid me-0.5 fa-clipboard-user text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="text-lg font-bold text-white tracking-wide">Punch Log Monitor</h1>
+                    <p class="text-xs text-slate-400">Real-time Employee Attendance Stream</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center space-x-3">
+                <span id="lastUpdatedBadge" class="hidden sm:inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-slate-700/70 text-slate-300 border border-slate-600/50">
+                    <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse mr-2"></span>
+                    Updated: <span id="lastUpdatedTime" class="ml-1 font-mono">--:--:--</span>
+                </span>
+                <button onclick="exportCSV()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 transition flex items-center gap-1.5 border border-slate-600">
+                    <i class="fa-solid fa-file-csv text-emerald-400"></i> Export CSV
+                </button>
+                <button onclick="copyJSON()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 transition flex items-center gap-1.5 border border-slate-600">
+                    <i class="fa-solid fa-code text-indigo-400"></i> Copy JSON
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+
+        <!-- API Integration Controls Bar -->
+        <section class="bg-slate-800/90 rounded-2xl p-4 sm:p-5 border border-slate-700/80 shadow-xl space-y-4">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                
+                <!-- API URL Input Group -->
+                <div class="flex-1 flex flex-col sm:flex-row gap-2">
+                    <div class="relative flex-1">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-link text-sm"></i>
+                        </div>
+                        <input type="url" id="apiUrlInput" placeholder="Enter API URL Endpoint (e.g. https://api.example.com/punch-logs)" 
+                            class="w-full pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                    </div>
+                    <button id="fetchBtn" onclick="fetchApiData()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/30 transition flex items-center justify-center gap-2 whitespace-nowrap">
+                        <i class="fa-solid fa-arrows-rotate" id="fetchIcon"></i> Fetch Logs
+                    </button>
+                </div>
+
+                <!-- Toggles & Settings -->
+                <div class="flex flex-wrap items-center gap-4 text-xs">
+                    <!-- Sample Data Fallback Toggle -->
+                    <label class="inline-flex items-center cursor-pointer select-none">
+                        <input type="checkbox" id="useMockToggle" class="sr-only peer" checked onchange="toggleMockDataMode()">
+                        <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600 relative"></div>
+                        <span class="ml-2 font-medium text-slate-300">Use Sample Data</span>
+                    </label>
+
+                    <div class="h-4 w-px bg-slate-700 hidden sm:block"></div>
+
+                    <!-- Auto Refresh -->
+                    <div class="flex items-center space-x-2">
+                        <label class="inline-flex items-center cursor-pointer select-none">
+                            <input type="checkbox" id="autoRefreshToggle" class="sr-only peer" onchange="toggleAutoRefresh()">
+                            <div class="w-9 h-5 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600 relative"></div>
+                            <span class="ml-2 font-medium text-slate-300">Auto Refresh</span>
+                        </label>
+                        <select id="refreshIntervalSelect" onchange="changeRefreshInterval()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-300 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-500">
+                            <option value="5000">5s</option>
+                            <option value="10000" selected>10s</option>
+                            <option value="30000">30s</option>
+                            <option value="60000">60s</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- CORS / API Notice Banner -->
+            <div id="apiNotice" class="text-xs bg-indigo-950/40 border border-indigo-800/50 rounded-lg p-2.5 text-indigo-300 flex items-start gap-2">
+                <i class="fa-solid fa-circle-info text-indigo-400 mt-0.5"></i>
+                <div>
+                    <strong>API Integration Note:</strong> Ensure your backend endpoint returns JSON matching the data schema and allows CORS requests (`Access-Control-Allow-Origin: *`). Toggle <i>"Use Sample Data"</i> off when testing live URLs.
+                </div>
+            </div>
+        </section>
+
+        <!-- Metrics Overview Cards -->
+        <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <!-- Total Logs -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 shadow-lg relative overflow-hidden group">
+                <div class="absolute -right-3 -bottom-3 text-slate-700/30 text-6xl group-hover:scale-110 transition duration-300">
+                    <i class="fa-solid fa-list-check"></i>
+                </div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Total Logs</div>
+                <div id="statTotalLogs" class="text-3xl font-extrabold text-white">0</div>
+                <div class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                    <i class="fa-solid fa-database text-indigo-400"></i> <span id="statFilteredRatio">0 filtered</span>
+                </div>
+            </div>
+
+            <!-- Unique Employees -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 shadow-lg relative overflow-hidden group">
+                <div class="absolute -right-3 -bottom-3 text-slate-700/30 text-6xl group-hover:scale-110 transition duration-300">
+                    <i class="fa-solid fa-users"></i>
+                </div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Unique Employees</div>
+                <div id="statUniqueEmps" class="text-3xl font-extrabold text-indigo-400">0</div>
+                <div class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                    <i class="fa-solid fa-user-check text-indigo-400"></i> Active in dataset
+                </div>
+            </div>
+
+            <!-- Active Areas -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 shadow-lg relative overflow-hidden group">
+                <div class="absolute -right-3 -bottom-3 text-slate-700/30 text-6xl group-hover:scale-110 transition duration-300">
+                    <i class="fa-solid fa-location-dot"></i>
+                </div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Active Areas</div>
+                <div id="statActiveAreas" class="text-3xl font-extrabold text-amber-400">0</div>
+                <div class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                    <i class="fa-solid fa-layer-group text-amber-400"></i> Zones logged
+                </div>
+            </div>
+
+            <!-- Latest Activity -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 shadow-lg relative overflow-hidden group">
+                <div class="absolute -right-3 -bottom-3 text-slate-700/30 text-6xl group-hover:scale-110 transition duration-300">
+                    <i class="fa-solid fa-clock"></i>
+                </div>
+                <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Recent Date Logs</div>
+                <div id="statRecentLogs" class="text-3xl font-extrabold text-emerald-400">0</div>
+                <div class="text-xs text-slate-400 mt-2 flex items-center gap-1">
+                    <i class="fa-solid fa-calendar-day text-emerald-400"></i> Latest logged day count
+                </div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Timeline Chart -->
+            <div class="lg:col-span-2 bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-column text-indigo-400"></i> Daily Punch Volume Breakdown
+                    </h2>
+                    <span class="text-xs text-slate-400">Log Count by Date</span>
+                </div>
+                <div class="relative w-full h-56">
+                    <canvas id="timelineChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Area Distribution Chart -->
+            <div class="bg-slate-800/80 rounded-2xl p-5 border border-slate-700/70 shadow-lg flex flex-col justify-between">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 class="text-sm font-bold text-slate-200 flex items-center gap-2">
+                        <i class="fa-solid fa-chart-pie text-amber-400"></i> Distribution by Area
+                    </h2>
+                    <span class="text-xs text-slate-400">Zones</span>
+                </div>
+                <div class="relative w-full h-56 flex items-center justify-center">
+                    <canvas id="areaChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Filter Controls & Data Table -->
+        <section class="bg-slate-800/90 rounded-2xl border border-slate-700/80 shadow-xl overflow-hidden">
+            
+            <!-- Filters Toolbar -->
+            <div class="p-4 sm:p-5 border-b border-slate-700/70 space-y-4">
+                <div class="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+                    
+                    <!-- Search Input -->
+                    <div class="relative flex-1">
+                        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+                            <i class="fa-solid fa-magnifying-glass text-sm"></i>
+                        </div>
+                        <input type="text" id="searchInput" oninput="applyFilters()" placeholder="Search employee name, ID, area, call ID..." 
+                            class="w-full pl-9 pr-4 py-2 bg-slate-900/90 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition">
+                    </div>
+
+                    <!-- Filter Dropdowns -->
+                    <div class="flex flex-wrap items-center gap-3">
+                        <!-- Area Filter -->
+                        <select id="areaFilter" onchange="applyFilters()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">All Areas</option>
+                        </select>
+
+                        <!-- Status Filter -->
+                        <select id="statusFilter" onchange="applyFilters()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+                            <option value="">All Statuses</option>
+                        </select>
+
+                        <!-- Date Filter -->
+                        <input type="date" id="dateFilter" onchange="applyFilters()" class="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500">
+
+                        <!-- Reset Button -->
+                        <button onclick="resetFilters()" class="px-3 py-2 bg-slate-700 hover:bg-slate-600 rounded-xl text-xs text-slate-300 transition flex items-center gap-1">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Table Container -->
+            <div class="overflow-x-auto min-h-[300px]">
+                <table class="w-full text-left border-collapse text-sm">
+                    <thead>
+                        <tr class="bg-slate-900/70 text-slate-400 uppercase text-xs font-semibold tracking-wider border-b border-slate-700/70">
+                            <th scope="col" class="py-3.5 px-4 cursor-pointer select-none hover:text-white transition" onclick="setSort('callId')">
+                                Call ID <span id="sort-callId" class="ml-1 text-slate-500">↕</span>
+                            </th>
+                            <th scope="col" class="py-3.5 px-4 cursor-pointer select-none hover:text-white transition" onclick="setSort('timestamp')">
+                                Date & Time <span id="sort-timestamp" class="ml-1 text-slate-500">↕</span>
+                            </th>
+                            <th scope="col" class="py-3.5 px-4 cursor-pointer select-none hover:text-white transition" onclick="setSort('empId')">
+                                Employee ID <span id="sort-empId" class="ml-1 text-slate-500">↕</span>
+                            </th>
+                            <th scope="col" class="py-3.5 px-4 cursor-pointer select-none hover:text-white transition" onclick="setSort('empName')">
+                                Employee Name <span id="sort-empName" class="ml-1 text-slate-500">↕</span>
+                            </th>
+                            <th scope="col" class="py-3.5 px-4 cursor-pointer select-none hover:text-white transition" onclick="setSort('area')">
+                                Area <span id="sort-area" class="ml-1 text-slate-500">↕</span>
+                            </th>
+                            <th scope="col" class="py-3.5 px-4 cursor-pointer select-none hover:text-white transition" onclick="setSort('status')">
+                                Status <span id="sort-status" class="ml-1 text-slate-500">↕</span>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody id="logsTableBody" class="divide-y divide-slate-700/50 text-slate-300">
+                        <!-- Dynamic Rows injected via JavaScript -->
+                    </tbody>
+                </table>
+
+                <!-- Empty State -->
+                <div id="emptyState" class="hidden py-12 flex flex-col items-center justify-center text-center">
+                    <div class="w-16 h-16 bg-slate-800 text-slate-500 rounded-full flex items-center justify-center text-2xl mb-3">
+                        <i class="fa-solid fa-folder-open"></i>
+                    </div>
+                    <h3 class="text-base font-semibold text-slate-300">No punch logs found</h3>
+                    <p class="text-xs text-slate-500 max-w-sm mt-1">Try adjusting your search terms, date parameters, or filter criteria.</p>
+                </div>
+            </div>
+
+            <!-- Table Pagination Bar -->
+            <div class="p-4 border-t border-slate-700/70 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/40">
+                <div class="flex items-center gap-3 text-xs text-slate-400">
+                    <span>Rows per page:</span>
+                    <select id="rowsPerPageSelect" onchange="changeRowsPerPage()" class="bg-slate-900 border border-slate-700 rounded-lg px-2 py-1 text-slate-200 focus:outline-none">
+                        <option value="5">5</option>
+                        <option value="10" selected>10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                    </select>
+                    <span id="paginationInfo">Showing 0-0 of 0</span>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button id="prevPageBtn" onclick="prevPage()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                        <i class="fa-solid fa-chevron-left mr-1"></i> Previous
+                    </button>
+                    <span id="pageNumberDisplay" class="text-xs text-slate-400 font-medium px-2">Page 1 of 1</span>
+                    <button id="nextPageBtn" onclick="nextPage()" class="px-3 py-1.5 rounded-lg bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed transition">
+                        Next <i class="fa-solid fa-chevron-right ml-1"></i>
+                    </button>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-800 bg-slate-950 py-4 text-center text-xs text-slate-500">
+        <div class="max-w-7xl mx-auto px-4">
+            Employee Punch Logs Dashboard &bull; Designed for seamless API Integration
+        </div>
+    </footer>
+
+    <!-- Logic Script -->
+    <script>
+        // Sample Data Provided by User
+        const SAMPLE_DATA = [
+            {"callId": 1, "timestamp": "2026-10-22T17:29:36.000Z", "empId": "DAS32", "empName": "Dhanveer Yadav", "area": "F16", "status": "Punch Out"},
+            {"callId": 6, "timestamp": "2026-10-22T17:30:12.000Z", "empId": "DAS39", "empName": "Surya Pandey", "area": "F17", "status": "Punch Out"},
+            {"callId": 1, "timestamp": "2026-10-22T17:45:18.000Z", "empId": "DAS32", "empName": "Dhanveer Yadav", "area": "F16", "status": "Punch Out"},
+            {"callId": 14, "timestamp": "2026-10-23T11:45:28.000Z", "empId": "FDT56", "empName": "Sanjeev  Kumar", "area": "F16", "status": "Punch Out"},
+            {"callId": 5, "timestamp": "2026-10-23T11:50:24.000Z", "empId": "VAS43", "empName": "Rishabh  Vishwakarma", "area": "F16", "status": "Punch Out"},
+            {"callId": 5, "timestamp": "2026-10-23T11:51:46.000Z", "empId": "VAS43", "empName": "Rishabh  Vishwakarma", "area": "F16", "status": "Punch Out"},
+            {"callId": 13, "timestamp": "2026-10-28T06:47:10.000Z", "empId": "FDT56", "empName": "Sanjeev  Kumar", "area": "F16", "status": "Punch Out"},
+            {"callId": 14, "timestamp": "2026-10-28T07:28:34.000Z", "empId": "FDT56", "empName": "Sanjeev  Kumar", "area": "F16", "status": "Punch Out"}
+        ];
+
+        // Global State
+        let rawLogsData = [];
+        let filteredLogsData = [];
+        let currentPage = 1;
+        let rowsPerPage = 10;
+        let sortColumn = 'timestamp';
+        let sortAsc = false;
+        let autoRefreshTimer = null;
+        let timelineChartInstance = null;
+        let areaChartInstance = null;
+
+        // Color Palettes for Employee Badges
+        const avatarColors = [
+            'bg-indigo-600', 'bg-emerald-600', 'bg-purple-600', 'bg-amber-600', 'bg-pink-600', 'bg-blue-600', 'bg-teal-600'
+        ];
+
+        // Initialization
+        window.onload = function() {
+            // Default load mock data
+            loadLogsData(SAMPLE_DATA);
+            showToast('Loaded initial sample punch log dataset', 'info');
+        };
+
+        // Main Data Ingestion Function
+        function loadLogsData(data) {
+            if (!Array.isArray(data)) {
+                showToast('API returned invalid format. Expected JSON Array.', 'error');
+                return;
+            }
+
+            rawLogsData = data;
+            populateFilterDropdowns();
+            applyFilters();
+            updateLastUpdatedBadge();
+        }
+
+        // Toggle Mock Mode vs Live API Mode
+        function toggleMockDataMode() {
+            const isMock = document.getElementById('useMockToggle').checked;
+            if (isMock) {
+                loadLogsData(SAMPLE_DATA);
+                showToast('Switched to Sample Dataset', 'info');
+            } else {
+                fetchApiData();
+            }
+        }
+
+        // Fetch Data from User Provided API URL
+        async function fetchApiData() {
+            const isMock = document.getElementById('useMockToggle').checked;
+            const url = document.getElementById('apiUrlInput').value.trim();
+
+            if (isMock && !url) {
+                loadLogsData(SAMPLE_DATA);
+                return;
+            }
+
+            if (!url && !isMock) {
+                showToast('Please enter a valid API URL endpoint.', 'warning');
+                return;
+            }
+
+            const fetchBtn = document.getElementById('fetchBtn');
+            const fetchIcon = document.getElementById('fetchIcon');
+            
+            fetchBtn.disabled = true;
+            fetchIcon.classList.add('fa-spin');
+
+            try {
+                const response = await fetch(url, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP Error Status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                loadLogsData(data);
+                showToast(`Successfully fetched ${data.length} records from API`, 'success');
+            } catch (err) {
+                console.error("API Fetch Error:", err);
+                showToast(`API Fetch Failed: ${err.message}. Check CORS or network console.`, 'error');
+                
+                // If API fails, fallback to sample data automatically if enabled or prompt user
+                if (!isMock) {
+                    showToast('Falling back to sample data for display integrity.', 'warning');
+                    loadLogsData(SAMPLE_DATA);
+                }
+            } finally {
+                fetchBtn.disabled = false;
+                fetchIcon.classList.remove('fa-spin');
+            }
+        }
+
+        // Dynamic Filter Dropdowns Setup
+        function populateFilterDropdowns() {
+            const areaSelect = document.getElementById('areaFilter');
+            const statusSelect = document.getElementById('statusFilter');
+
+            const currentAreaVal = areaSelect.value;
+            const currentStatusVal = statusSelect.value;
+
+            // Extract unique areas and statuses
+            const areas = [...new Set(rawLogsData.map(d => d.area).filter(Boolean))].sort();
+            const statuses = [...new Set(rawLogsData.map(d => d.status).filter(Boolean))].sort();
+
+            areaSelect.innerHTML = '<option value="">All Areas</option>';
+            areas.forEach(area => {
+                const opt = document.createElement('option');
+                opt.value = area;
+                opt.textContent = `Area ${area}`;
+                areaSelect.appendChild(opt);
+            });
+            areaSelect.value = currentAreaVal;
+
+            statusSelect.innerHTML = '<option value="">All Statuses</option>';
+            statuses.forEach(st => {
+                const opt = document.createElement('option');
+                opt.value = st;
+                opt.textContent = st;
+                statusSelect.appendChild(opt);
+            });
+            statusSelect.value = currentStatusVal;
+        }
+
+        // Filtering & Sorting Logic
+        function applyFilters() {
+            const query = document.getElementById('searchInput').value.toLowerCase().trim();
+            const areaVal = document.getElementById('areaFilter').value;
+            const statusVal = document.getElementById('statusFilter').value;
+            const dateVal = document.getElementById('dateFilter').value; // YYYY-MM-DD format
+
+            filteredLogsData = rawLogsData.filter(item => {
+                // Search match
+                const matchQuery = !query || 
+                    (item.empName && item.empName.toLowerCase().includes(query)) ||
+                    (item.empId && item.empId.toLowerCase().includes(query)) ||
+                    (item.area && item.area.toLowerCase().includes(query)) ||
+                    (item.callId && String(item.callId).includes(query)) ||
+                    (item.status && item.status.toLowerCase().includes(query));
+
+                // Area match
+                const matchArea = !areaVal || item.area === areaVal;
+
+                // Status match
+                const matchStatus = !statusVal || item.status === statusVal;
+
+                // Date match
+                let matchDate = true;
+                if (dateVal && item.timestamp) {
+                    const itemDateStr = new Date(item.timestamp).toISOString().split('T')[0];
+                    matchDate = itemDateStr === dateVal;
+                }
+
+                return matchQuery && matchArea && matchStatus && matchDate;
+            });
+
+            // Sort data
+            sortData();
+            
+            // Reset to page 1 after filtering
+            currentPage = 1;
+
+            // Update UI elements
+            updateMetrics();
+            renderCharts();
+            renderTable();
+        }
+
+        function setSort(col) {
+            if (sortColumn === col) {
+                sortAsc = !sortAsc;
+            } else {
+                sortColumn = col;
+                sortAsc = true;
+            }
+
+            // Update Header Sorting Indicators
+            const columns = ['callId', 'timestamp', 'empId', 'empName', 'area', 'status'];
+            columns.forEach(c => {
+                const iconSpan = document.getElementById(`sort-${c}`);
+                if (iconSpan) {
+                    if (c === sortColumn) {
+                        iconSpan.textContent = sortAsc ? '↑' : '↓';
+                        iconSpan.className = 'ml-1 text-indigo-400 font-bold';
+                    } else {
+                        iconSpan.textContent = '↕';
+                        iconSpan.className = 'ml-1 text-slate-500';
+                    }
+                }
+            });
+
+            applyFilters();
+        }
+
+        function sortData() {
+            filteredLogsData.sort((a, b) => {
+                let valA = a[sortColumn];
+                let valB = b[sortColumn];
+
+                if (sortColumn === 'timestamp') {
+                    valA = new Date(valA || 0).getTime();
+                    valB = new Date(valB || 0).getTime();
+                } else if (typeof valA === 'string') {
+                    valA = valA.toLowerCase();
+                    valB = (valB || '').toLowerCase();
+                }
+
+                if (valA < valB) return sortAsc ? -1 : 1;
+                if (valA > valB) return sortAsc ? 1 : -1;
+                return 0;
+            });
+        }
+
+        function resetFilters() {
+            document.getElementById('searchInput').value = '';
+            document.getElementById('areaFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('dateFilter').value = '';
+            applyFilters();
+            showToast('Filters reset', 'info');
+        }
+
+        // Render Table Rows
+        function renderTable() {
+            const tbody = document.getElementById('logsTableBody');
+            const emptyState = document.getElementById('emptyState');
+            tbody.innerHTML = '';
+
+            const total = filteredLogsData.length;
+
+            if (total === 0) {
+                emptyState.classList.remove('hidden');
+                updatePaginationControls(0);
+                return;
+            } else {
+                emptyState.classList.add('hidden');
+            }
+
+            const startIndex = (currentPage - 1) * rowsPerPage;
+            const endIndex = Math.min(startIndex + rowsPerPage, total);
+            const paginatedItems = filteredLogsData.slice(startIndex, endIndex);
+
+            paginatedItems.forEach(item => {
+                const tr = document.createElement('tr');
+                tr.className = 'hover:bg-slate-800/60 transition group';
+
+                // Format Timestamp
+                const dateObj = new Date(item.timestamp);
+                const formattedDate = dateObj.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+                const formattedTime = dateObj.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+
+                // Generate consistent avatar color based on Emp ID
+                const charCodeSum = (item.empId || 'E').split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+                const avatarBg = avatarColors[charCodeSum % avatarColors.length];
+
+                // Status Badge CSS
+                let statusBadgeClass = 'bg-slate-700 text-slate-300 border-slate-600';
+                if (item.status === 'Punch Out') {
+                    statusBadgeClass = 'bg-rose-950/60 text-rose-300 border-rose-800/60';
+                } else if (item.status === 'Punch In') {
+                    statusBadgeClass = 'bg-emerald-950/60 text-emerald-300 border-emerald-800/60';
+                }
+
+                tr.innerHTML = `
+                    <td class="py-3 px-4 font-mono text-xs text-slate-400 group-hover:text-slate-200">#${item.callId ?? 'N/A'}</td>
+                    <td class="py-3 px-4">
+                        <div class="font-medium text-slate-200 text-xs">${formattedDate}</div>
+                        <div class="text-[11px] text-slate-400 font-mono">${formattedTime}</div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="inline-block px-2 py-0.5 rounded bg-slate-900 border border-slate-700 text-xs font-mono text-indigo-300">
+                            ${escapeHtml(item.empId)}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <div class="flex items-center gap-2.5">
+                            <div class="w-7 h-7 rounded-full ${avatarBg} flex items-center justify-center text-white text-xs font-bold shadow-sm">
+                                ${(item.empName || 'E').charAt(0).toUpperCase()}
+                            </div>
+                            <span class="font-semibold text-slate-200 text-xs">${escapeHtml(item.empName)}</span>
+                        </div>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-950/40 text-amber-300 border border-amber-800/50">
+                            <i class="fa-solid fa-building text-[10px]"></i> ${escapeHtml(item.area)}
+                        </span>
+                    </td>
+                    <td class="py-3 px-4">
+                        <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border ${statusBadgeClass}">
+                            <span class="w-1.5 h-1.5 rounded-full ${item.status === 'Punch Out' ? 'bg-rose-400' : 'bg-emerald-400'}"></span>
+                            ${escapeHtml(item.status)}
+                        </span>
+                    </td>
+                `;
+
+                tbody.appendChild(tr);
+            });
+
+            updatePaginationControls(total);
+        }
+
+        // Pagination Navigation
+        function updatePaginationControls(totalItems) {
+            const totalPages = Math.max(1, Math.ceil(totalItems / rowsPerPage));
+            
+            const startItem = totalItems === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+            const endItem = Math.min(currentPage * rowsPerPage, totalItems);
+
+            document.getElementById('paginationInfo').textContent = `Showing ${startItem}-${endItem} of ${totalItems}`;
+            document.getElementById('pageNumberDisplay').textContent = `Page ${currentPage} of ${totalPages}`;
+
+            document.getElementById('prevPageBtn').disabled = currentPage <= 1;
+            document.getElementById('nextPageBtn').disabled = currentPage >= totalPages;
+        }
+
+        function prevPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                renderTable();
+            }
+        }
+
+        function nextPage() {
+            const totalPages = Math.ceil(filteredLogsData.length / rowsPerPage);
+            if (currentPage < totalPages) {
+                currentPage++;
+                renderTable();
+            }
+        }
+
+        function changeRowsPerPage() {
+            rowsPerPage = parseInt(document.getElementById('rowsPerPageSelect').value, 10);
+            currentPage = 1;
+            renderTable();
+        }
+
+        // Metrics Calculation
+        function updateMetrics() {
+            const totalLogs = rawLogsData.length;
+            const filteredTotal = filteredLogsData.length;
+
+            const uniqueEmps = new Set(filteredLogsData.map(d => d.empId)).size;
+            const activeAreas = new Set(filteredLogsData.map(d => d.area)).size;
+
+            // Calculate Latest Date Log count
+            let recentCount = 0;
+            if (filteredLogsData.length > 0) {
+                const dates = filteredLogsData.map(d => d.timestamp ? d.timestamp.split('T')[0] : '');
+                const latestDate = dates.sort().reverse()[0];
+                recentCount = filteredLogsData.filter(d => d.timestamp && d.timestamp.startsWith(latestDate)).length;
+            }
+
+            document.getElementById('statTotalLogs').textContent = totalLogs;
+            document.getElementById('statFilteredRatio').textContent = `${filteredTotal} matching search`;
+            document.getElementById('statUniqueEmps').textContent = uniqueEmps;
+            document.getElementById('statActiveAreas').textContent = activeAreas;
+            document.getElementById('statRecentLogs').textContent = recentCount;
+        }
+
+        // Chart Visualizations
+        function renderCharts() {
+            renderTimelineChart();
+            renderAreaChart();
+        }
+
+        function renderTimelineChart() {
+            const ctx = document.getElementById('timelineChart').getContext('2d');
+
+            // Aggregate counts by date
+            const dateCounts = {};
+            filteredLogsData.forEach(item => {
+                if (item.timestamp) {
+                    const dateStr = item.timestamp.split('T')[0];
+                    dateCounts[dateStr] = (dateCounts[dateStr] || 0) + 1;
+                }
+            });
+
+            const sortedDates = Object.keys(dateCounts).sort();
+            const counts = sortedDates.map(d => dateCounts[d]);
+
+            if (timelineChartInstance) {
+                timelineChartInstance.destroy();
+            }
+
+            timelineChartInstance = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: sortedDates,
+                    datasets: [{
+                        label: 'Punch Volume',
+                        data: counts,
+                        backgroundColor: 'rgba(99, 102, 241, 0.6)',
+                        borderColor: 'rgba(99, 102, 241, 1)',
+                        borderWidth: 1.5,
+                        borderRadius: 6,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            grid: { color: 'rgba(51, 65, 85, 0.3)' },
+                            ticks: { color: '#94a3b8', font: { size: 11 } }
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: { precision: 0, color: '#94a3b8', font: { size: 11 } },
+                            grid: { color: 'rgba(51, 65, 85, 0.4)' }
+                        }
+                    }
+                }
+            });
+        }
+
+        function renderAreaChart() {
+            const ctx = document.getElementById('areaChart').getContext('2d');
+
+            // Aggregate counts by Area
+            const areaCounts = {};
+            filteredLogsData.forEach(item => {
+                const area = item.area || 'Unknown';
+                areaCounts[area] = (areaCounts[area] || 0) + 1;
+            });
+
+            const labels = Object.keys(areaCounts);
+            const counts = Object.values(areaCounts);
+
+            if (areaChartInstance) {
+                areaChartInstance.destroy();
+            }
+
+            areaChartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        data: counts,
+                        backgroundColor: [
+                            'rgba(99, 102, 241, 0.8)',
+                            'rgba(245, 158, 11, 0.8)',
+                            'rgba(16, 185, 129, 0.8)',
+                            'rgba(236, 72, 153, 0.8)',
+                            'rgba(14, 165, 233, 0.8)'
+                        ],
+                        borderColor: '#1e293b',
+                        borderWidth: 2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: { color: '#cbd5e1', font: { size: 11 }, boxWidth: 12 }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Auto Refresh System
+        function toggleAutoRefresh() {
+            const isEnabled = document.getElementById('autoRefreshToggle').checked;
+            if (isEnabled) {
+                startAutoRefresh();
+                showToast('Auto refresh enabled', 'info');
+            } else {
+                stopAutoRefresh();
+                showToast('Auto refresh disabled', 'info');
+            }
+        }
+
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            const interval = parseInt(document.getElementById('refreshIntervalSelect').value, 10);
+            autoRefreshTimer = setInterval(() => {
+                fetchApiData();
+            }, interval);
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
+            }
+        }
+
+        function changeRefreshInterval() {
+            if (document.getElementById('autoRefreshToggle').checked) {
+                startAutoRefresh();
+            }
+        }
+
+        // Export Functionality
+        function exportCSV() {
+            if (!filteredLogsData || filteredLogsData.length === 0) {
+                showToast('No log data available to export', 'warning');
+                return;
+            }
+
+            const headers = ["callId", "timestamp", "empId", "empName", "area", "status"];
+            const csvRows = [headers.join(',')];
+
+            filteredLogsData.forEach(row => {
+                const values = headers.map(header => {
+                    const val = row[header] !== undefined && row[header] !== null ? String(row[header]) : '';
+                    // Escape quotes for CSV format safety
+                    const escaped = val.replace(/"/g, '""');
+                    return `"${escaped}"`;
+                });
+                csvRows.push(values.join(','));
+            });
+
+            const csvContent = "data:text/csv;charset=utf-8," + csvRows.join("\n");
+            const encodedUri = encodeURI(csvContent);
+            const link = document.createElement("a");
+            link.setAttribute("href", encodedUri);
+            link.setAttribute("download", `punch_logs_${new Date().toISOString().split('T')[0]}.csv`);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            showToast('CSV export downloaded successfully', 'success');
+        }
+
+        function copyJSON() {
+            if (!filteredLogsData || filteredLogsData.length === 0) {
+                showToast('No log data available to copy', 'warning');
+                return;
+            }
+
+            const jsonString = JSON.stringify(filteredLogsData, null, 2);
+            
+            // Fallback clipboard method for iframe security rules
+            const textArea = document.createElement("textarea");
+            textArea.value = jsonString;
+            document.body.appendChild(textArea);
+            textArea.select();
+            try {
+                document.execCommand('copy');
+                showToast('Filtered JSON data copied to clipboard', 'success');
+            } catch (err) {
+                showToast('Failed to copy JSON', 'error');
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // Helpers & UI Toast Notifications
+        function updateLastUpdatedBadge() {
+            const now = new Date();
+            document.getElementById('lastUpdatedTime').textContent = now.toLocaleTimeString();
+        }
+
+        function escapeHtml(str) {
+            if (!str) return '';
+            return String(str)
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            
+            let bgClass = 'bg-slate-800 border-slate-700 text-slate-200';
+            let iconClass = 'fa-circle-info text-indigo-400';
+
+            if (type === 'success') {
+                bgClass = 'bg-slate-800 border-emerald-700/80 text-emerald-200';
+                iconClass = 'fa-circle-check text-emerald-400';
+            } else if (type === 'error') {
+                bgClass = 'bg-slate-800 border-rose-700/80 text-rose-200';
+                iconClass = 'fa-circle-exclamation text-rose-400';
+            } else if (type === 'warning') {
+                bgClass = 'bg-slate-800 border-amber-700/80 text-amber-200';
+                iconClass = 'fa-triangle-exclamation text-amber-400';
+            }
+
+            toast.className = `pointer-events-auto flex items-center gap-3 p-3.5 rounded-xl border shadow-xl text-xs transition duration-300 transform translate-y-2 opacity-0 ${bgClass}`;
+            toast.innerHTML = `
+                <i class="fa-solid ${iconClass} text-base"></i>
+                <span class="flex-1 font-medium">${escapeHtml(message)}</span>
+                <button onclick="this.parentElement.remove()" class="text-slate-400 hover:text-white">
+                    <i class="fa-solid fa-xmark text-sm"></i>
+                </button>
+            `;
+
+            container.appendChild(toast);
+
+            // Trigger animation
+            setTimeout(() => {
+                toast.classList.remove('translate-y-2', 'opacity-0');
+            }, 10);
+
+            // Auto dismiss after 4 seconds
+            setTimeout(() => {
+                if (toast.parentElement) {
+                    toast.classList.add('opacity-0', 'translate-y-2');
+                    setTimeout(() => toast.remove(), 300);
+                }
+            }, 4000);
+        }
+    </script>
+</body>
+</html>
